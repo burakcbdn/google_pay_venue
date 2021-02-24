@@ -29,10 +29,11 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   bool googlePayEnabled = false;
+  bool applePayEnabled = false;
 
   String locationID = "L6QAMVVZWQH73";
 
-  Future<void> initSquareGooglePay() async {
+  Future<void> initSquarePayService() async {
     bool canUseGooglePlay = false;
 
     if (Platform.isAndroid) {
@@ -42,6 +43,10 @@ class _HomePageState extends State<HomePage> {
       );
 
       canUseGooglePlay = await InAppPayments.canUseGooglePay;
+    } else if (Platform.isIOS) {
+      await InAppPayments.initializeApplePay('');
+      applePayEnabled = await InAppPayments.canUseApplePay;
+      setState(() {});
     }
 
     setState(() {
@@ -93,7 +98,6 @@ class _HomePageState extends State<HomePage> {
       "loginDevice": "MOBILE"
     };
 
-
     var headers = {
       "Authorization": loginAccessToken,
       "audience": "mobile-customer",
@@ -128,8 +132,6 @@ class _HomePageState extends State<HomePage> {
       ]
     };
 
-
-
     var headers = {
       "Authorization": authAccessToken,
       "audience": "mobile-customer",
@@ -142,15 +144,10 @@ class _HomePageState extends State<HomePage> {
 
     Map<String, dynamic> responseBody = jsonDecode(response.body);
 
-    int orderId = responseBody["orderId"];
-    String squareOrderId = responseBody["squareOrderId"];
-    double grandTotal = responseBody["grandTotal"];
-
     return responseBody;
   }
 
   Future<void> confirm() async {
-
     var body = {
       "squareOrderId": squareOrderConfirmId,
       "sourceId": "cnon:card-nonce-ok"
@@ -173,8 +170,8 @@ class _HomePageState extends State<HomePage> {
 
   String squareOrderConfirmId;
 
+  /// Google Pay Configuration
   Future<void> payWithGoogle() async {
-
     Map<String, dynamic> orderResult = await order();
 
     String squareOrderId = orderResult["squareOrderId"];
@@ -195,7 +192,6 @@ class _HomePageState extends State<HomePage> {
 
   void _onGooglePayNonceRequestSuccess(CardDetails result) async {
     try {
-
       confirm();
 
       // print("payment done?");
@@ -216,37 +212,81 @@ class _HomePageState extends State<HomePage> {
     // handle google pay failure
   }
 
+  /// ============ ============== =========== ===============
+
+  /// Apple Pay Configuration
+  Future<void> payWithApple() async {
+    Map<String, dynamic> orderResult = await order();
+
+    String squareOrderId = orderResult["squareOrderId"];
+    squareOrderConfirmId = squareOrderId;
+    int orderId = orderResult["orderId"];
+    String price = orderResult["grandTotal"];
+
+    try {
+      await InAppPayments.requestApplePayNonce(
+        price: price,
+        summaryLabel: "pay",
+        countryCode: "+44",
+        currencyCode: 'USD',
+        onApplePayComplete: onApplePayComplete,
+        onApplePayNonceRequestFailure: onApplePayNonceRequestFailure,
+        onApplePayNonceRequestSuccess: onApplePayNonceRequestSuccess,
+      );
+    } on InAppPaymentsException catch (e) {}
+  }
+
+  void onApplePayComplete() {}
+
+  void onApplePayNonceRequestFailure(ErrorInfo errorInfo) {}
+
+  void onApplePayNonceRequestSuccess(CardDetails result) {
+    confirm();
+  }
+
+  /// ============ ============== =========== ===============
+
   Future<void> _initSquarePayment() async {
-    await InAppPayments.setSquareApplicationId('sandbox-sq0idb-c7xlomqnz-ZJ_dU3qvdizw');
+    await InAppPayments.setSquareApplicationId(
+        'sandbox-sq0idb-c7xlomqnz-ZJ_dU3qvdizw');
   }
 
   @override
   void initState() {
     super.initState();
     _initSquarePayment();
-    initSquareGooglePay();
+    initSquarePayService();
     login().then((value) => auth());
-
-
-
   }
-
-
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
         child: Center(
-          child: Text(
-            googlePayEnabled ? "Google Pay Enabled" : "Cannot use google pay",
-            style: TextStyle(color: Colors.black, fontSize: 35),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                googlePayEnabled
+                    ? "Google Pay Enabled"
+                    : "Cannot use Google pay",
+                style: TextStyle(color: Colors.black, fontSize: 35),
+              ),
+              SizedBox(height: 50,),
+              Text(
+                applePayEnabled ? "Apple Pay Enabled" : "Cannot use Apple pay",
+                style: TextStyle(color: Colors.black, fontSize: 35),
+              )
+            ],
           ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          payWithGoogle();
+          if (Platform.isAndroid) {
+            payWithGoogle();
+          } else if (Platform.isIOS) {}
         },
       ),
     );
